@@ -53,7 +53,22 @@ textarea{min-height:145px}
  .primary{min-height:54px;font-size:18px}
 }
 
-.selectedMood{font-size:14px;margin:7px 0 13px;text-align:center}#voiceStatus{min-height:28px;padding:4px}details summary{cursor:pointer;font-weight:700;padding:12px;background:#eaf1df;border-radius:10px} .toolbar .secondary{min-width:0} </style></head><body><main id="app"></main><nav id="nav"></nav><script>
+.selectedMood{font-size:14px;margin:7px 0 13px;text-align:center}#voiceStatus{min-height:28px;padding:4px}details summary{cursor:pointer;font-weight:700;padding:12px;background:#eaf1df;border-radius:10px} .toolbar .secondary{min-width:0} 
+/* v0.3.1: iOS Safari date input must stay inside the card */
+.card{min-width:0}
+.card input[type="date"]{
+  display:block;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  padding:12px;
+  font-size:17px;
+  overflow:hidden;
+  -webkit-appearance:none;
+  appearance:none;
+}
+</style></head><body><main id="app"></main><nav id="nav"></nav><script>
 const EM=['😫','😟','🙁','😐','🙂','😊','😄'];const KEY='pz_demo_01';let records=[];try{records=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){};let view='home',mood=4,editId=null,selectedId=null,extended=false,search='',period=7;let voiceSession=null,originalDraft='',recognition=null;
 function el(s){return document.createElement('div')}function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function save(){localStorage.setItem(KEY,JSON.stringify(records))}function dt(x){return new Date(x).toLocaleDateString('pl-PL',{day:'numeric',month:'long',year:'numeric'})}
