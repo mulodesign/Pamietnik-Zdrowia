@@ -70,6 +70,12 @@ textarea{min-height:145px}
 }
 </style></head><body><main id="app"></main><nav id="nav"></nav><script>
 const EM=['😫','😟','🙁','😐','🙂','😊','😄'];const KEY='pz_demo_01';let records=[];try{records=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){};let view='home',mood=4,editId=null,selectedId=null,extended=false,search='',period=7;let voiceSession=null,originalDraft='',recognition=null;
+if(!Array.isArray(records))records=[];
+records=records.filter(r=>r&&typeof r==='object'&&typeof r.text==='string'&&typeof r.date==='string'&&Number.isFinite(Number(r.mood))&&Number(r.mood)>=1&&Number(r.mood)<=7);
+window.addEventListener('error',function(e){showDiagnostic(e.message||'Nieznany błąd');});
+window.addEventListener('unhandledrejection',function(e){showDiagnostic((e.reason&&e.reason.message)||'Błąd przetwarzania');});
+function showDiagnostic(msg){let node=document.getElementById('app');if(node){node.innerHTML='<section class="card" style="margin-top:18px"><h1>Nie udało się otworzyć pamiętnika</h1><p>Twoje dotychczasowe wpisy nie zostały usunięte.</p><p class="mini">Błąd: '+esc(msg)+'</p><button class="primary" onclick="location.reload()">Spróbuj ponownie</button></section>';}}
+
 function el(s){return document.createElement('div')}function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function save(){localStorage.setItem(KEY,JSON.stringify(records))}function dt(x){return new Date(x).toLocaleDateString('pl-PL',{day:'numeric',month:'long',year:'numeric'})}
 function faces(v){return '<div class="faces">'+EM.map((e,i)=>'<button class="face '+(v===i+1?'active':'')+'" onclick="setMood('+(i+1)+')">'+e+'<small>'+(i+1)+'</small></button>').join('')+'</div>'}
@@ -123,6 +129,6 @@ function analysis(){let {rec,days,avg}=averages();let bars=days.map(d=>'<div cla
 function more(){return '<h1>Więcej</h1><section class="card"><h2>O prototypie • wersja 0.3</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button><button class="secondary push" onclick="clearDemo()">Usuń wszystkie wpisy demonstracyjne</button></section>'}
 function addDemo(){if(records.length&&!confirm('Dodać fikcyjne wpisy do istniejącej historii?'))return;let data=[['Po spacerze','Dziś miałem więcej energii i byłem spokojny.',6,0],['Po gorszej nocy','Rano czułem się senny i zmęczony.',3,1],['Zwykły dzień','Dobre samopoczucie, bez większych dolegliwości.',5,2]];data.forEach(([topic,text,mood,offset])=>{let d=new Date();d.setDate(d.getDate()-offset);records.push({id:Date.now()+'-'+offset+'-'+Math.random(),topic,text,mood,date:d.toISOString().slice(0,10)})});save();openView('history')}
 function clearDemo(){if(confirm('Usunąć wszystkie wpisy z tej przeglądarki?')){records=[];save();openView('home')}}
-function render(){document.getElementById('app').innerHTML=header()+(view==='home'?home():view==='write'?write():view==='history'?history():view==='detail'?detail():view==='analysis'?analysis():more());boxNav()}
+function render(){try{document.getElementById('app').innerHTML=header()+(view==='home'?home():view==='write'?write():view==='history'?history():view==='detail'?detail():view==='analysis'?analysis():more());boxNav()}catch(e){showDiagnostic(e.message)}}
 render();
 </script></body></html>
