@@ -68,8 +68,8 @@ textarea{min-height:145px}
   -webkit-appearance:none;
   appearance:none;
 }
-.modeRow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.modeRow .secondary{padding:10px 5px;font-size:15px}.modeRow .chosen{background:#dfeecf;border:2px solid #2f754b}.previewBox{background:#eef3e6;border:1px solid #d0dfc5;padding:13px;border-radius:12px;line-height:1.5}.previewBox p{margin-bottom:0}#clarifyPanel{padding:12px;border:1px solid #e1decf;border-radius:12px;margin-top:10px}#clarifyPanel[hidden],#smartPanel[hidden]{display:none}#clarifyExtra{min-height:75px}</style></head><body><main id="app"></main><nav id="nav"></nav><script>
-const EM=['😫','😟','🙁','😐','🙂','😊','😄'];const KEY='pz_demo_01';let records=[];try{records=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){};let view='home',mood=4,editId=null,selectedId=null,extended=false,search='',period=7;let voiceSession=null,originalDraft='',recognition=null;let entryMode='literal';
+.modeRow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.modeRow .secondary{padding:10px 5px;font-size:15px}.modeRow .chosen{background:#dfeecf;border:2px solid #2f754b}.previewBox{background:#eef3e6;border:1px solid #d0dfc5;padding:13px;border-radius:12px;line-height:1.5}.previewBox p{margin-bottom:0}#clarifyPanel{padding:12px;border:1px solid #e1decf;border-radius:12px;margin-top:10px}#clarifyPanel[hidden],#smartPanel[hidden]{display:none}#clarifyExtra{min-height:75px}.observations{padding-left:24px;line-height:1.6}.observations li{margin:7px 0}.previewBox p{margin-top:7px}#smartPreview:empty:before{content:'Wpisz lub podyktuj tekst, aby zobaczyć podgląd.';color:#607468}</style></head><body><main id="app"></main><nav id="nav"></nav><script>
+const EM=['😫','😟','🙁','😐','🙂','😊','😄'];const KEY='pz_demo_01';let records=[];try{records=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){};let view='home',mood=4,editId=null,selectedId=null,extended=false,search='',period=7;let voiceSession=null,originalDraft='',recognition=null;let entryMode='literal';let smartLastSource=null;
 if(!Array.isArray(records))records=[];
 records=records.filter(r=>r&&typeof r==='object'&&typeof r.text==='string'&&typeof r.date==='string'&&Number.isFinite(Number(r.mood))&&Number(r.mood)>=1&&Number(r.mood)<=7);
 window.addEventListener('error',function(e){showDiagnostic(e.message||'Nieznany błąd');});
@@ -95,11 +95,11 @@ return '<section class="card"><h1>'+(r?'Edytuj wpis':'Nowy wpis')+'</h1>'+
 '<label>Ocena samopoczucia (obowiązkowa)</label>'+faces(mood)+
 '<p class="muted selectedMood">Wybrana ocena: '+mood+'/7</p>'+
 '<label>Tryb zapisu</label><div class="modeRow"><button id="modeLiteral" class="secondary '+(entryMode==='literal'?'chosen':'')+'" type="button" onclick="setEntryMode(\'literal\')">Dosłowny 1:1</button><button id="modeSmart" class="secondary '+(entryMode==='smart'?'chosen':'')+'" type="button" onclick="setEntryMode(\'smart\')">Inteligentny (test)</button></div>'+
-'<p class="muted mini">Wersja formularza: 0.4.2</p><p id="modeHint" class="muted mini">'+(entryMode==='literal'?'Zapis bez automatycznych zmian w tekście.':'Lokalne porządkowanie i wyszukiwanie odczuć, bez zewnętrznego AI.')+'</p>'+
-'<label for="entryText">Twoja wypowiedź / notatka</label><textarea autocomplete="off" id="entryText" oninput="refreshSmart()" placeholder="Powiedz lub napisz, jak się czujesz...">'+esc(r?.originalText||r?.text||'')+'</textarea>'+
+'<p class="muted mini">Wersja formularza: 0.5</p><p id="modeHint" class="muted mini">'+(entryMode==='literal'?'Zapis bez automatycznych zmian w tekście.':'Lokalne porządkowanie i wyszukiwanie odczuć, bez zewnętrznego AI.')+'</p>'+
+'<label for="entryText">Twoja wypowiedź / notatka</label><textarea autocomplete="off" id="entryText" oninput="refreshSmart()" onchange="refreshSmart()" onblur="refreshSmart()" placeholder="Powiedz lub napisz, jak się czujesz...">'+esc(r?.originalText||r?.text||'')+'</textarea>'+
 '<button class="primary push" type="button" onclick="focusText()">🎙 Dyktuj / wpisz tekst</button>'+
 '<p id="voiceStatus" class="mini muted" role="status" aria-live="polite">Aby dyktować, użyj mikrofonu klawiatury telefonu.</p>'+
-'<p id="formWarning" role="alert" class="notice" hidden></p><div id="smartPanel" '+(entryMode==='smart'?'':'hidden')+'><h2>Uporządkowany podgląd</h2><p class="mini muted">Wersja testowa: nie interpretuje znaczenia zdań za pomocą AI, tylko wskazuje słowa i fragmenty wypowiedzi. Zawsze sprawdź wynik.</p><div id="smartPreview" class="previewBox"></div><button class="secondary push" type="button" onclick="toggleClarify()">Doprecyzuj</button><div id="clarifyPanel" hidden><p class="mini muted">Odpowiedz tylko, jeżeli chcesz. Uzupełnienie zostanie dopisane do opracowanego tekstu, oryginał pozostanie bez zmian.</p><label for="clarifyWhen">Kiedy występowały opisane odczucia?</label><input id="clarifyWhen" placeholder="Np. rano lub wieczorem" oninput="refreshSmart()"><label for="clarifyExtra">Co jeszcze chcesz doprecyzować?</label><textarea id="clarifyExtra" placeholder="Np. ból dotyczył lewej nogi" oninput="refreshSmart()"></textarea></div></div>'+
+'<p id="formWarning" role="alert" class="notice" hidden></p><div id="smartPanel" '+(entryMode==='smart'?'':'hidden')+'><h2>Uporządkowany podgląd</h2><p class="mini muted">Podział wypowiedzi według określeń czasu. Sprawdź, czy podział jest prawidłowy.</p><div id="smartPreview" class="previewBox"></div><button class="secondary push" type="button" onclick="toggleClarify()">Doprecyzuj</button><div id="clarifyPanel" hidden><p class="mini muted">Odpowiedz tylko, jeżeli chcesz. Uzupełnienie zostanie dopisane do opracowanego tekstu, oryginał pozostanie bez zmian.</p><label for="clarifyWhen">Kiedy występowały opisane odczucia?</label><input id="clarifyWhen" placeholder="Np. rano lub wieczorem" oninput="refreshSmart()"><label for="clarifyExtra">Co jeszcze chcesz doprecyzować?</label><textarea id="clarifyExtra" placeholder="Np. ból dotyczył lewej nogi" oninput="refreshSmart()"></textarea></div></div>'+
 '<div class="notice push">Wersja demonstracyjna nie ma jeszcze szyfrowania ani prawdziwej AI. Dyktowanie systemowe może korzystać z usług sieciowych. Używaj wyłącznie fikcyjnych informacji.</div>'+
 '<button class="primary push" type="button" onclick="storeEntry()">✓ Zapisz wpis</button></section>';
 }
@@ -110,7 +110,7 @@ if(panel)panel.hidden=entryMode!=='smart';
 document.getElementById('modeLiteral').classList.toggle('chosen',entryMode==='literal');
 document.getElementById('modeSmart').classList.toggle('chosen',entryMode==='smart');
 document.getElementById('modeHint').textContent=entryMode==='literal'?'Zapis bez automatycznych zmian w tekście.':'Lokalne porządkowanie i wyszukiwanie odczuć, bez zewnętrznego AI.';
-refreshSmart();
+smartLastSource=null;refreshSmart();
 }
 function focusText(){
 const t=document.getElementById('entryText'),status=document.getElementById('voiceStatus');
@@ -128,17 +128,39 @@ const patterns=[
 ];
 return patterns.filter(([label,re])=>re.test(text)).map(([label])=>label);
 }
+function splitObservations(raw){
+const cleaned=raw.replace(/\s+/g,' ').trim();
+if(!cleaned)return [];
+const temporal=/\b(po południu|przed południem|w południe|rano|wieczorem|w nocy|nocą|później|następnie)\b/gi;
+let marks=[...cleaned.matchAll(temporal)];
+if(!marks.length)return cleaned.split(/(?<=[.!?])\s+/).map(x=>x.trim()).filter(Boolean);
+let parts=[],previous=0;
+for(let i=0;i<marks.length;i++){
+ const m=marks[i],offset=m.index;
+ if(offset>previous){
+   const prior=cleaned.slice(previous,offset).trim().replace(/[,;]+$/,'');
+   if(prior)parts.push(prior);
+ }
+ previous=offset;
+ const next=i+1<marks.length?marks[i+1].index:cleaned.length;
+ const seg=cleaned.slice(previous,next).trim().replace(/[,;]+$/,'');
+ if(seg)parts.push(seg);
+ previous=next;
+}
+return parts.length?parts:[cleaned];
+}
 function composeSmart(text,when='',extra=''){
-const raw=text.trim();
-if(!raw)return {plain:'',observations:[]};
-let plain=raw.replace(/\s+/g,' ').trim();
-plain=plain.charAt(0).toUpperCase()+plain.slice(1);
-if(!/[.!?…]$/.test(plain))plain+='.';
-const observations=extractObservations(raw);
-let additions=[];
-if(when.trim())additions.push('Czas występowania (doprecyzowanie użytkownika): '+when.trim());
-if(extra.trim())additions.push('Dodatkowa obserwacja użytkownika: '+extra.trim());
-return {plain:plain+(additions.length?'\n\n'+additions.join('\n'):''),observations};
+ const raw=text.trim();
+ if(!raw)return {plain:'',observations:[],parts:[]};
+ let plain=raw.replace(/\s+/g,' ').trim();
+ plain=plain.charAt(0).toUpperCase()+plain.slice(1);
+ if(!/[.!?…]$/.test(plain))plain+='.';
+ const observations=extractObservations(raw);
+ const parts=splitObservations(raw);
+ let additions=[];
+ if(when.trim())additions.push('Czas występowania (doprecyzowanie użytkownika): '+when.trim());
+ if(extra.trim())additions.push('Dodatkowa obserwacja użytkownika: '+extra.trim());
+ return {plain:plain+(additions.length?'\n\n'+additions.join('\n'):''),observations,parts};
 }
 function isCodeLeak(s){
  return /<\/?(?:div|button|section|textarea|script|input|label)\b|class\s*=\s*["']|onclick\s*=\s*["']|<\/[a-z]{2,}>/i.test(s||'');
@@ -159,9 +181,21 @@ function safeFormText(id){
 function refreshSmart(){
 if(entryMode!=='smart')return;
 const p=document.getElementById('smartPreview'),t=document.getElementById('entryText');if(!p||!t)return;
-let when=safeFormText('clarifyWhen'),extra=safeFormText('clarifyExtra');
-let result=composeSmart(safeFormText('entryText'),when,extra);
-p.innerHTML=result.plain?'<div class="details">'+esc(result.plain)+'</div><p class="mini"><strong>Wykryte określenia:</strong> '+(result.observations.length?result.observations.map(esc).join(', '):'brak rozpoznanych określeń')+'</p>':'<p class="muted">Po wpisaniu lub podyktowaniu tekstu pojawi się podgląd.</p>';
+const when=safeFormText('clarifyWhen'),extra=safeFormText('clarifyExtra');
+const result=composeSmart(safeFormText('entryText'),when,extra);
+smartLastSource=t.value+'|'+when+'|'+extra;
+p.innerHTML=result.plain?
+ '<p><strong>Odczytana wypowiedź:</strong></p><p class="details">'+esc(result.plain)+'</p>'+
+ '<p><strong>Obserwacje w kolejności:</strong></p><ol class="observations">'+result.parts.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>'+
+ '<p class="mini"><strong>Wykryte określenia:</strong> '+(result.observations.length?result.observations.map(esc).join(', '):'brak rozpoznanych określeń')+'</p>':
+ '<p class="muted">Po wpisaniu lub podyktowaniu tekstu pojawi się podgląd.</p>';
+}
+function pollSmartPreview(){
+if(view!=='write'||entryMode!=='smart')return;
+const t=document.getElementById('entryText');
+if(!t)return;
+const current=t.value+'|'+(document.getElementById('clarifyWhen')?.value||'')+'|'+(document.getElementById('clarifyExtra')?.value||'');
+if(current!==smartLastSource)refreshSmart();
 }
 function toggleClarify(){
 const c=document.getElementById('clarifyPanel');if(!c)return;c.hidden=!c.hidden;if(!c.hidden)document.getElementById('clarifyWhen').focus();
@@ -191,9 +225,10 @@ function editEntry(){let r=records.find(x=>x.id===selectedId);editId=r.id;mood=r
 function removeEntry(){if(confirm('Czy na pewno usunąć wpis?')){records=records.filter(x=>x.id!==selectedId);save();openView('history')}}
 function averages(){let cutoff=new Date();cutoff.setDate(cutoff.getDate()-period+1);cutoff.setHours(0,0,0,0);let rec=records.filter(r=>new Date(r.date+'T12:00:00')>=cutoff),by={};rec.forEach(r=>(by[r.date]??=[]).push(r.mood));let days=Object.entries(by).sort((a,b)=>a[0].localeCompare(b[0])).map(([day,v])=>({day,score:v.reduce((a,b)=>a+b,0)/v.length}));return {rec,days,avg:days.length?(days.reduce((a,d)=>a+d.score,0)/days.length).toFixed(1).replace('.',','):'—'}}
 function analysis(){let {rec,days,avg}=averages();let bars=days.map(d=>'<div class="barwrap"><div class="bar" style="height:'+((d.score/7)*100)+'%"></div><span>'+new Date(d.day+'T12:00:00').toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'})+'</span></div>').join('');let topics={};rec.forEach(r=>{let t=r.topic||'Bez tematu';topics[t]=(topics[t]||0)+1});return '<h1>Analiza samopoczucia</h1><section class="card"><label>Okres</label><select id="period" onchange="period=Number(this.value);render()"><option value="7" '+(period===7?'selected':'')+'>Ostatnie 7 dni</option><option value="30" '+(period===30?'selected':'')+'>Ostatnie 30 dni</option><option value="90" '+(period===90?'selected':'')+'>Ostatnie 90 dni</option></select><div class="toolbar"><button class="secondary" onclick="extended=false;render()">Prosta '+(!extended?'✓':'')+'</button><button class="secondary" onclick="extended=true;render()">Rozszerzona '+(extended?'✓':'')+'</button></div><div class="stats"><div class="stat"><span class="mini">Średnia dzienna</span><br><b>'+avg+'/7</b></div><div class="stat"><span class="mini">Liczba wpisów</span><br><b>'+rec.length+'</b></div></div><p class="muted">Oceny z '+days.length+' dni z zapisami. Brak wpisu nie oznacza złego samopoczucia.</p>'+(extended?'<h2>Ocena w czasie</h2><div class="chart">'+bars+'</div><h2>Tematy</h2>'+Object.entries(topics).map(([t,n])=>'<p>'+esc(t)+': <b>'+n+'</b></p>').join('')+'<h2>Wpisy z okresu</h2>'+list(rec.sort((a,b)=>b.date.localeCompare(a.date))):'<p>'+ (rec.length?'Otwórz analizę rozszerzoną, aby obejrzeć oceny dzienne i tematy.':'Zapisz kilka obserwacji, aby zobaczyć podsumowanie.')+'</p>')+'</section>'}
-function more(){return '<h1>Więcej</h1><section class="card"><h2>O prototypie • wersja 0.4.2</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button><button class="secondary push" onclick="clearDemo()">Usuń wszystkie wpisy demonstracyjne</button></section>'}
+function more(){return '<h1>Więcej</h1><section class="card"><h2>O prototypie • wersja 0.5</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button><button class="secondary push" onclick="clearDemo()">Usuń wszystkie wpisy demonstracyjne</button></section>'}
 function addDemo(){if(records.length&&!confirm('Dodać fikcyjne wpisy do istniejącej historii?'))return;let data=[['Po spacerze','Dziś miałem więcej energii i byłem spokojny.',6,0],['Po gorszej nocy','Rano czułem się senny i zmęczony.',3,1],['Zwykły dzień','Dobre samopoczucie, bez większych dolegliwości.',5,2]];data.forEach(([topic,text,mood,offset])=>{let d=new Date();d.setDate(d.getDate()-offset);records.push({id:Date.now()+'-'+offset+'-'+Math.random(),topic,text,mood,date:d.toISOString().slice(0,10)})});save();openView('history')}
 function clearDemo(){if(confirm('Usunąć wszystkie wpisy z tej przeglądarki?')){records=[];save();openView('home')}}
-function render(){try{document.getElementById('app').innerHTML=header()+(view==='home'?home():view==='write'?write():view==='history'?history():view==='detail'?detail():view==='analysis'?analysis():more());boxNav()}catch(e){showDiagnostic(e.message)}}
+function render(){try{document.getElementById('app').innerHTML=header()+(view==='home'?home():view==='write'?write():view==='history'?history():view==='detail'?detail():view==='analysis'?analysis():more());boxNav();if(view==='write'&&entryMode==='smart'){smartLastSource=null;refreshSmart()}}catch(e){showDiagnostic(e.message)}}
 render();
+setInterval(pollSmartPreview,450);
 </script></body></html>
