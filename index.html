@@ -68,8 +68,8 @@ textarea{min-height:145px}
   -webkit-appearance:none;
   appearance:none;
 }
-</style></head><body><main id="app"></main><nav id="nav"></nav><script>
-const EM=['😫','😟','🙁','😐','🙂','😊','😄'];const KEY='pz_demo_01';let records=[];try{records=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){};let view='home',mood=4,editId=null,selectedId=null,extended=false,search='',period=7;let voiceSession=null,originalDraft='',recognition=null;
+.modeRow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.modeRow .secondary{padding:10px 5px;font-size:15px}.modeRow .chosen{background:#dfeecf;border:2px solid #2f754b}.previewBox{background:#eef3e6;border:1px solid #d0dfc5;padding:13px;border-radius:12px;line-height:1.5}.previewBox p{margin-bottom:0}#clarifyPanel{padding:12px;border:1px solid #e1decf;border-radius:12px;margin-top:10px}#clarifyPanel[hidden],#smartPanel[hidden]{display:none}#clarifyExtra{min-height:75px}</style></head><body><main id="app"></main><nav id="nav"></nav><script>
+const EM=['😫','😟','🙁','😐','🙂','😊','😄'];const KEY='pz_demo_01';let records=[];try{records=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){};let view='home',mood=4,editId=null,selectedId=null,extended=false,search='',period=7;let voiceSession=null,originalDraft='',recognition=null;let entryMode='literal';
 if(!Array.isArray(records))records=[];
 records=records.filter(r=>r&&typeof r==='object'&&typeof r.text==='string'&&typeof r.date==='string'&&Number.isFinite(Number(r.mood))&&Number(r.mood)>=1&&Number(r.mood)<=7);
 window.addEventListener('error',function(e){showDiagnostic(e.message||'Nieznany błąd');});
@@ -84,64 +84,98 @@ function setMood(n){mood=n;document.querySelectorAll('.face').forEach((b,i)=>b.c
 function header(){return '<header><div class="logo">📖</div><div><div class="name">Pamiętnik Zdrowia</div><div class="muted">Twój prywatny dziennik samopoczucia</div></div></header>'}
 function boxNav(){let navs=[['home','⌂','Start'],['write','✎','Wpis'],['history','▤','Historia'],['analysis','▥','Analiza'],['more','⚙','Więcej']];document.getElementById('nav').innerHTML=navs.map(([id,ico,label])=>'<button class="'+(view===id?'active':'')+'" onclick="openView(\''+id+'\')"><span>'+ico+'</span>'+label+'</button>').join('')}
 function home(){return '<section class="card"><h1>Jak się dzisiaj czujesz?</h1><p class="muted">Wybierz buźkę i zapisz swoją obserwację.</p>'+faces(mood)+'<p class="muted center selectedMood">Wybrana ocena: '+mood+'/7</p><button class="primary" onclick="newEntry()">🎙 Nowy wpis</button></section><div class="grid"><button class="tile" onclick="openView(\'history\')"><span>📖</span>Historia wpisów</button><button class="tile" onclick="openView(\'analysis\')"><span>📊</span>Analiza samopoczucia</button><button class="tile" onclick="openView(\'history\')"><span>🔎</span>Szukaj w pamiętniku</button><button class="tile" onclick="openView(\'more\')"><span>🔒</span>Ustawienia</button></div><section class="card push"><h2>Ostatnie wpisy</h2>'+list(records.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3))+'</section>'}
-function newEntry(){editId=null;originalDraft='';openView('write')}
-function write(){let r=records.find(x=>x.id===editId),dd=r?.date||new Date().toISOString().slice(0,10);
+
+function newEntry(){editId=null;originalDraft='';entryMode='literal';openView('write')}
+function write(){
+const r=records.find(x=>x.id===editId),dd=r?.date||new Date().toISOString().slice(0,10);
+if(r)entryMode=r.mode||'literal';
 return '<section class="card"><h1>'+(r?'Edytuj wpis':'Nowy wpis')+'</h1>'+
-'<label>Data</label><input id="date" type="date" value="'+dd+'">'+
-'<label>Temat (opcjonalnie)</label><input id="topic" placeholder="Np. po spacerze, po zabiegu" value="'+esc(r?.topic||'')+'">'+
+'<label for="date">Data</label><input id="date" type="date" value="'+dd+'">'+
+'<label for="topic">Temat (opcjonalnie)</label><input id="topic" placeholder="Np. po spacerze, po zabiegu" value="'+esc(r?.topic||'')+'">'+
 '<label>Ocena samopoczucia (obowiązkowa)</label>'+faces(mood)+
 '<p class="muted selectedMood">Wybrana ocena: '+mood+'/7</p>'+
-'<label for="entryText">Twoja wypowiedź / notatka</label><textarea id="entryText" placeholder="Powiedz lub napisz, jak się czujesz...">'+esc(r?.text||'')+'</textarea>'+
-'<div class="toolbar"><button class="secondary" type="button" id="voiceBtn" onclick="startVoice()">🎙 Dyktuj w przeglądarce</button><button class="secondary" type="button" onclick="focusText()">⌨️ Klawiatura / mikrofon</button></div>'+
-'<div id="voiceStatus" class="mini muted" role="status" aria-live="polite">Jeżeli przeglądarka nie uruchomi mikrofonu, wybierz „Klawiatura / mikrofon” i dotknij mikrofonu na klawiaturze iPhone’a.</div>'+
-'<div class="notice push">TEST GŁOSU: przeglądarka lub klawiatura może wysłać nagranie do zewnętrznej usługi. Dyktuj wyłącznie fikcyjne zdania. Funkcja nie jest jeszcze przeznaczona do prywatnych danych zdrowotnych.</div>'+
-'<button class="primary push" onclick="storeEntry()">✓ Zapisz wpis</button></section>'}
+'<label>Tryb zapisu</label><div class="modeRow"><button id="modeLiteral" class="secondary '+(entryMode==='literal'?'chosen':'')+'" type="button" onclick="setEntryMode(\'literal\')">Dosłowny 1:1</button><button id="modeSmart" class="secondary '+(entryMode==='smart'?'chosen':'')+'" type="button" onclick="setEntryMode(\'smart\')">Inteligentny (test)</button></div>'+
+'<p id="modeHint" class="muted mini">'+(entryMode==='literal'?'Zapis bez automatycznych zmian w tekście.':'Lokalne porządkowanie i wyszukiwanie odczuć, bez zewnętrznego AI.')+'</p>'+
+'<label for="entryText">Twoja wypowiedź / notatka</label><textarea id="entryText" oninput="refreshSmart()" placeholder="Powiedz lub napisz, jak się czujesz...">'+esc(r?.originalText||r?.text||'')+'</textarea>'+
+'<button class="primary push" type="button" onclick="focusText()">🎙 Dyktuj / wpisz tekst</button>'+
+'<p id="voiceStatus" class="mini muted" role="status" aria-live="polite">Aby dyktować, użyj mikrofonu klawiatury telefonu.</p>'+
+'<div id="smartPanel" '+(entryMode==='smart'?'':'hidden')+'><h2>Uporządkowany podgląd</h2><p class="mini muted">Wersja testowa: nie interpretuje znaczenia zdań za pomocą AI, tylko wskazuje słowa i fragmenty wypowiedzi. Zawsze sprawdź wynik.</p><div id="smartPreview" class="previewBox"></div><button class="secondary push" type="button" onclick="toggleClarify()">Doprecyzuj</button><div id="clarifyPanel" hidden><p class="mini muted">Odpowiedz tylko, jeżeli chcesz. Uzupełnienie zostanie dopisane do opracowanego tekstu, oryginał pozostanie bez zmian.</p><label for="clarifyWhen">Kiedy występowały opisane odczucia?</label><input id="clarifyWhen" placeholder="Np. rano lub wieczorem" oninput="refreshSmart()"><label for="clarifyExtra">Co jeszcze chcesz doprecyzować?</label><textarea id="clarifyExtra" placeholder="Np. ból dotyczył lewej nogi" oninput="refreshSmart()"></div></div>'+
+'<div class="notice push">Wersja demonstracyjna nie ma jeszcze szyfrowania ani prawdziwej AI. Dyktowanie systemowe może korzystać z usług sieciowych. Używaj wyłącznie fikcyjnych informacji.</div>'+
+'<button class="primary push" type="button" onclick="storeEntry()">✓ Zapisz wpis</button></section>';
+}
+function setEntryMode(mode){
+entryMode=mode==='smart'?'smart':'literal';
+let panel=document.getElementById('smartPanel');
+if(panel)panel.hidden=entryMode!=='smart';
+document.getElementById('modeLiteral').classList.toggle('chosen',entryMode==='literal');
+document.getElementById('modeSmart').classList.toggle('chosen',entryMode==='smart');
+document.getElementById('modeHint').textContent=entryMode==='literal'?'Zapis bez automatycznych zmian w tekście.':'Lokalne porządkowanie i wyszukiwanie odczuć, bez zewnętrznego AI.';
+refreshSmart();
+}
 function focusText(){
 const t=document.getElementById('entryText'),status=document.getElementById('voiceStatus');
 t.focus();
-status.textContent='Klawiatura otwarta. Aby dyktować na iPhonie, dotknij mikrofonu na klawiaturze systemowej (nie w aplikacji).';
+status.textContent='Dotknij mikrofonu na klawiaturze systemowej. Po dyktowaniu sprawdź i popraw tekst.';
 }
-function startVoice(){
-const status=document.getElementById('voiceStatus'),btn=document.getElementById('voiceBtn'),input=document.getElementById('entryText');
-const API=window.SpeechRecognition||window.webkitSpeechRecognition;
-if(!API){status.textContent='Ta przeglądarka nie udostępnia rozpoznawania mowy. Użyj przycisku „Klawiatura / mikrofon”.';focusText();return;}
-if(recognition){try{recognition.stop()}catch(e){}return;}
-const base=input.value.trim();let full='',failed=false,started=false;
-let sr;
-try{sr=new API();sr.lang='pl-PL';sr.interimResults=true;sr.continuous=false;recognition=sr;}catch(e){status.textContent='Nie można rozpocząć rozpoznawania. Użyj mikrofonu klawiatury.';return;}
-sr.onstart=()=>{started=true;status.textContent='Słucham… Powiedz fikcyjne zdanie. Dotknij ponownie, aby zakończyć.';btn.textContent='■ Zakończ dyktowanie'};
-sr.onresult=event=>{
-let finalized='',temporary='';
-for(let i=0;i<event.results.length;i++){let phrase=event.results[i][0].transcript;if(event.results[i].isFinal)finalized+=phrase+' ';else temporary+=phrase+' ';}
-full=finalized.trim();
-input.value=[base,full,temporary.trim()].filter(Boolean).join(' ');
-status.textContent='Rozpoznaję… Możesz poprawić tekst przed zapisaniem.';
-};
-sr.onerror=event=>{failed=true;status.textContent='Dyktowanie w przeglądarce nie działa ('+event.error+'). Dotknij „Klawiatura / mikrofon”, a następnie mikrofonu na klawiaturze.';};
-sr.onend=()=>{
-if(recognition===sr)recognition=null;
-btn.textContent='🎙 Dyktuj w przeglądarce';
-if(full){input.value=[base,full].filter(Boolean).join(' ');originalDraft=[originalDraft,full].filter(Boolean).join(' ');}
-else if(!failed)status.textContent=started?'Nie rozpoznano wypowiedzi. Spróbuj mikrofonu klawiatury.':'Przeglądarka nie rozpoczęła nasłuchiwania. Użyj mikrofonu klawiatury.';
-};
-status.textContent='Uruchamiam mikrofon… Jeśli nie wystartuje, użyj mikrofonu klawiatury.';
-try{sr.start()}catch(e){recognition=null;btn.textContent='🎙 Dyktuj w przeglądarce';status.textContent='Safari nie pozwoliło uruchomić dyktowania: '+e.message+'. Użyj mikrofonu klawiatury.';}
+function extractObservations(text){
+const patterns=[
+['Senność',/\b(senny|senna|senne|senność|spać|spania|śpiący|śpiąca)\b/i],
+['Zmęczenie',/\b(zmęczony|zmęczona|zmęczenie|zmęczona|wyczerpany|wyczerpana|brak energii)\b/i],
+['Głód',/\b(głodny|głodna|głód|apetyt)\b/i],
+['Ból',/\b(ból|bolała|bolało|bolały|bolał|boli|bolą|ból głowy|bolesny)\b/i],
+['Zawroty głowy',/\b(zawroty|kręciło mi się w głowie)\b/i],
+['Poprawa samopoczucia',/\b(lepiej|poprawa|poprawiło|poprawił|dobrze|spokojnie)\b/i]
+];
+return patterns.filter(([label,re])=>re.test(text)).map(([label])=>label);
 }
-function storeEntry(){let text=document.getElementById('entryText').value.trim(),topic=document.getElementById('topic').value.trim(),date=document.getElementById('date').value;
-if(!text||!date){alert('Dodaj datę i treść wpisu.');return}
-if(editId){let r=records.find(x=>x.id===editId);Object.assign(r,{text,topic,date,mood});if(!r.originalText)r.originalText=r.text}
-else{records.push({id:Date.now()+'-'+Math.random().toString(36).slice(2),date,text,originalText:originalDraft||text,topic,mood})}
-save();editId=null;originalDraft='';openView('history')}
+function composeSmart(text,when='',extra=''){
+const raw=text.trim();
+if(!raw)return {plain:'',observations:[]};
+let plain=raw.replace(/\s+/g,' ').trim();
+plain=plain.charAt(0).toUpperCase()+plain.slice(1);
+if(!/[.!?…]$/.test(plain))plain+='.';
+const observations=extractObservations(raw);
+let additions=[];
+if(when.trim())additions.push('Czas występowania (doprecyzowanie użytkownika): '+when.trim());
+if(extra.trim())additions.push('Dodatkowa obserwacja użytkownika: '+extra.trim());
+return {plain:plain+(additions.length?'\n\n'+additions.join('\n'):''),observations};
+}
+function refreshSmart(){
+if(entryMode!=='smart')return;
+const p=document.getElementById('smartPreview'),t=document.getElementById('entryText');if(!p||!t)return;
+let when=document.getElementById('clarifyWhen')?.value||'',extra=document.getElementById('clarifyExtra')?.value||'';
+let result=composeSmart(t.value,when,extra);
+p.innerHTML=result.plain?'<div class="details">'+esc(result.plain)+'</div><p class="mini"><strong>Wykryte określenia:</strong> '+(result.observations.length?result.observations.map(esc).join(', '):'brak rozpoznanych określeń')+'</p>':'<p class="muted">Po wpisaniu lub podyktowaniu tekstu pojawi się podgląd.</p>';
+}
+function toggleClarify(){
+const c=document.getElementById('clarifyPanel');if(!c)return;c.hidden=!c.hidden;if(!c.hidden)document.getElementById('clarifyWhen').focus();
+}
+function storeEntry(){
+const raw=document.getElementById('entryText').value.trim(),topic=document.getElementById('topic').value.trim(),date=document.getElementById('date').value;
+if(!raw||!date){alert('Dodaj datę i treść wpisu.');return}
+const when=entryMode==='smart'?(document.getElementById('clarifyWhen')?.value||''):'';
+const extra=entryMode==='smart'?(document.getElementById('clarifyExtra')?.value||''):'';
+const structured=entryMode==='smart'?composeSmart(raw,when,extra):null;
+const text=structured?structured.plain:raw;
+const tags=structured?structured.observations:[];
+if(editId){
+const r=records.find(x=>x.id===editId);
+Object.assign(r,{text,topic,date,mood,mode:entryMode,tags,originalText:r.originalText||raw});
+}else{
+records.push({id:Date.now()+'-'+Math.random().toString(36).slice(2),date,text,originalText:raw,topic,mood,mode:entryMode,tags});
+}
+save();editId=null;originalDraft='';openView('history');
+}
 function list(arr){return arr.length?arr.map(r=>'<button class="entry" onclick="showDetail(\''+r.id+'\')"><div class="row"><span class="mini">'+dt(r.date)+'</span><span class="score">'+EM[r.mood-1]+' '+r.mood+'/7</span></div><strong>'+esc(r.topic||'Samopoczucie')+'</strong><p class="mini">'+esc(r.text.slice(0,120))+(r.text.length>120?'…':'')+'</p></button>').join(''):'<p class="muted">Nie ma jeszcze wpisów. Dodaj pierwszy wpis, aby zobaczyć historię.</p>'}
 function history(){let s=search.toLocaleLowerCase('pl');let rs=records.filter(r=>(r.text+' '+r.topic).toLocaleLowerCase('pl').includes(s)).sort((a,b)=>b.date.localeCompare(a.date));return '<h1>Historia wpisów</h1><input id="search" placeholder="Szukaj objawu lub tematu" value="'+esc(search)+'" oninput="search=this.value;refreshList()"><div id="results">'+list(rs)+'</div>'}
 function refreshList(){let c=document.getElementById('results');if(c)c.innerHTML=list(records.filter(r=>(r.text+' '+r.topic).toLocaleLowerCase('pl').includes(search.toLocaleLowerCase('pl'))).sort((a,b)=>b.date.localeCompare(a.date)))}
 function showDetail(id){selectedId=id;openView('detail')}
 function detail(){let r=records.find(x=>x.id===selectedId);if(!r)return '<p>Nie znaleziono wpisu.</p>';return '<button class="secondary" onclick="openView(\'history\')">← Historia</button><section class="card push"><div class="row"><span>'+dt(r.date)+'</span><strong class="score">'+EM[r.mood-1]+' '+r.mood+'/7</strong></div><h1>'+esc(r.topic||'Samopoczucie')+'</h1><h2>Treść wpisu</h2><div class="details">'+esc(r.text)+'</div>'+(r.originalText&&r.originalText!==r.text?'<details class="push"><summary>Oryginalny tekst dyktowania</summary><p class="details">'+esc(r.originalText)+'</p></details>':'')+'<div class="toolbar push"><button class="secondary" onclick="editEntry()">✎ Edytuj</button><button class="secondary" onclick="removeEntry()">Usuń</button></div></section>'}
-function editEntry(){let r=records.find(x=>x.id===selectedId);editId=r.id;mood=r.mood;originalDraft='';openView('write')}
+function editEntry(){let r=records.find(x=>x.id===selectedId);editId=r.id;mood=r.mood;originalDraft='';entryMode=r.mode||'literal';openView('write')}
 function removeEntry(){if(confirm('Czy na pewno usunąć wpis?')){records=records.filter(x=>x.id!==selectedId);save();openView('history')}}
 function averages(){let cutoff=new Date();cutoff.setDate(cutoff.getDate()-period+1);cutoff.setHours(0,0,0,0);let rec=records.filter(r=>new Date(r.date+'T12:00:00')>=cutoff),by={};rec.forEach(r=>(by[r.date]??=[]).push(r.mood));let days=Object.entries(by).sort((a,b)=>a[0].localeCompare(b[0])).map(([day,v])=>({day,score:v.reduce((a,b)=>a+b,0)/v.length}));return {rec,days,avg:days.length?(days.reduce((a,d)=>a+d.score,0)/days.length).toFixed(1).replace('.',','):'—'}}
 function analysis(){let {rec,days,avg}=averages();let bars=days.map(d=>'<div class="barwrap"><div class="bar" style="height:'+((d.score/7)*100)+'%"></div><span>'+new Date(d.day+'T12:00:00').toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'})+'</span></div>').join('');let topics={};rec.forEach(r=>{let t=r.topic||'Bez tematu';topics[t]=(topics[t]||0)+1});return '<h1>Analiza samopoczucia</h1><section class="card"><label>Okres</label><select id="period" onchange="period=Number(this.value);render()"><option value="7" '+(period===7?'selected':'')+'>Ostatnie 7 dni</option><option value="30" '+(period===30?'selected':'')+'>Ostatnie 30 dni</option><option value="90" '+(period===90?'selected':'')+'>Ostatnie 90 dni</option></select><div class="toolbar"><button class="secondary" onclick="extended=false;render()">Prosta '+(!extended?'✓':'')+'</button><button class="secondary" onclick="extended=true;render()">Rozszerzona '+(extended?'✓':'')+'</button></div><div class="stats"><div class="stat"><span class="mini">Średnia dzienna</span><br><b>'+avg+'/7</b></div><div class="stat"><span class="mini">Liczba wpisów</span><br><b>'+rec.length+'</b></div></div><p class="muted">Oceny z '+days.length+' dni z zapisami. Brak wpisu nie oznacza złego samopoczucia.</p>'+(extended?'<h2>Ocena w czasie</h2><div class="chart">'+bars+'</div><h2>Tematy</h2>'+Object.entries(topics).map(([t,n])=>'<p>'+esc(t)+': <b>'+n+'</b></p>').join('')+'<h2>Wpisy z okresu</h2>'+list(rec.sort((a,b)=>b.date.localeCompare(a.date))):'<p>'+ (rec.length?'Otwórz analizę rozszerzoną, aby obejrzeć oceny dzienne i tematy.':'Zapisz kilka obserwacji, aby zobaczyć podsumowanie.')+'</p>')+'</section>'}
-function more(){return '<h1>Więcej</h1><section class="card"><h2>O prototypie • wersja 0.3.1</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button><button class="secondary push" onclick="clearDemo()">Usuń wszystkie wpisy demonstracyjne</button></section>'}
+function more(){return '<h1>Więcej</h1><section class="card"><h2>O prototypie • wersja 0.4</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button><button class="secondary push" onclick="clearDemo()">Usuń wszystkie wpisy demonstracyjne</button></section>'}
 function addDemo(){if(records.length&&!confirm('Dodać fikcyjne wpisy do istniejącej historii?'))return;let data=[['Po spacerze','Dziś miałem więcej energii i byłem spokojny.',6,0],['Po gorszej nocy','Rano czułem się senny i zmęczony.',3,1],['Zwykły dzień','Dobre samopoczucie, bez większych dolegliwości.',5,2]];data.forEach(([topic,text,mood,offset])=>{let d=new Date();d.setDate(d.getDate()-offset);records.push({id:Date.now()+'-'+offset+'-'+Math.random(),topic,text,mood,date:d.toISOString().slice(0,10)})});save();openView('history')}
 function clearDemo(){if(confirm('Usunąć wszystkie wpisy z tej przeglądarki?')){records=[];save();openView('home')}}
 function render(){try{document.getElementById('app').innerHTML=header()+(view==='home'?home():view==='write'?write():view==='history'?history():view==='detail'?detail():view==='analysis'?analysis():more());boxNav()}catch(e){showDiagnostic(e.message)}}
