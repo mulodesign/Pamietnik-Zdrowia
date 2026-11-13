@@ -92,25 +92,40 @@ return '<section class="card"><h1>'+(r?'Edytuj wpis':'Nowy wpis')+'</h1>'+
 '<label>Ocena samopoczucia (obowiązkowa)</label>'+faces(mood)+
 '<p class="muted selectedMood">Wybrana ocena: '+mood+'/7</p>'+
 '<label for="entryText">Twoja wypowiedź / notatka</label><textarea id="entryText" placeholder="Powiedz lub napisz, jak się czujesz...">'+esc(r?.text||'')+'</textarea>'+
-'<div class="toolbar"><button class="secondary" type="button" id="voiceBtn" onclick="startVoice()">🎙 Dyktuj (test)</button><button class="secondary" type="button" onclick="focusText()">✎ Wpisz ręcznie</button></div>'+
-'<div id="voiceStatus" class="mini muted" role="status" aria-live="polite">Możesz też użyć mikrofonu na klawiaturze telefonu.</div>'+
-'<div class="notice push">Wersja demonstracyjna. Rozpoznawanie głosu przez przeglądarkę lub klawiaturę może przesyłać nagranie do zewnętrznej usługi. Używaj tylko fikcyjnych danych. Nie testuj na prawdziwych informacjach zdrowotnych.</div>'+
+'<div class="toolbar"><button class="secondary" type="button" id="voiceBtn" onclick="startVoice()">🎙 Dyktuj w przeglądarce</button><button class="secondary" type="button" onclick="focusText()">⌨️ Klawiatura / mikrofon</button></div>'+
+'<div id="voiceStatus" class="mini muted" role="status" aria-live="polite">Jeżeli przeglądarka nie uruchomi mikrofonu, wybierz „Klawiatura / mikrofon” i dotknij mikrofonu na klawiaturze iPhone’a.</div>'+
+'<div class="notice push">TEST GŁOSU: przeglądarka lub klawiatura może wysłać nagranie do zewnętrznej usługi. Dyktuj wyłącznie fikcyjne zdania. Funkcja nie jest jeszcze przeznaczona do prywatnych danych zdrowotnych.</div>'+
 '<button class="primary push" onclick="storeEntry()">✓ Zapisz wpis</button></section>'}
-function focusText(){let t=document.getElementById('entryText');t.focus()}
+function focusText(){
+const t=document.getElementById('entryText'),status=document.getElementById('voiceStatus');
+t.focus();
+status.textContent='Klawiatura otwarta. Aby dyktować na iPhonie, dotknij mikrofonu na klawiaturze systemowej (nie w aplikacji).';
+}
 function startVoice(){
+const status=document.getElementById('voiceStatus'),btn=document.getElementById('voiceBtn'),input=document.getElementById('entryText');
 const API=window.SpeechRecognition||window.webkitSpeechRecognition;
-if(!API){alert('Ta przeglądarka nie obsługuje tego sposobu dyktowania. Dotknij pola tekstowego i użyj mikrofonu na klawiaturze telefonu. Testuj wyłącznie fikcyjne wypowiedzi.');return}
-if(recognition){recognition.stop();return}
-if(!confirm('To test dyktowania fikcyjnych danych. Rozpoznawanie mowy w przeglądarce może korzystać z serwerów zewnętrznych. Nie dyktuj informacji zdrowotnych. Rozpocząć test?'))return;
-const input=document.getElementById('entryText'),status=document.getElementById('voiceStatus'),btn=document.getElementById('voiceBtn');
-const base=input.value.trim();let finalText='';
-let sr=new API();recognition=sr;sr.lang='pl-PL';sr.interimResults=true;sr.continuous=false;
-sr.onstart=()=>{status.textContent='Słucham... mów wyraźnie. Naciśnij przycisk ponownie, aby zakończyć.';btn.textContent='■ Zakończ dyktowanie'};
-sr.onresult=(event)=>{let partial='';for(let i=event.resultIndex;i<event.results.length;i++){let phrase=event.results[i][0].transcript;if(event.results[i].isFinal)finalText+=phrase+' ';else partial+=phrase}
-input.value=[base,finalText.trim(),partial].filter(Boolean).join(' ').trim();status.textContent='Tekst z dyktowania można poprawić przed zapisem.'};
-sr.onerror=(event)=>{status.textContent='Nie udało się rozpoznać mowy ('+event.error+'). Możesz użyć klawiatury.'};
-sr.onend=()=>{if(recognition===sr)recognition=null;btn.textContent='🎙 Dyktuj (test)';if(finalText.trim()){originalDraft=[originalDraft,finalText.trim()].filter(Boolean).join(' ')}};
-try{sr.start()}catch(e){recognition=null;status.textContent='Nie można uruchomić mikrofonu. Spróbuj dyktowania klawiaturą.'}
+if(!API){status.textContent='Ta przeglądarka nie udostępnia rozpoznawania mowy. Użyj przycisku „Klawiatura / mikrofon”.';focusText();return;}
+if(recognition){try{recognition.stop()}catch(e){}return;}
+const base=input.value.trim();let full='',failed=false,started=false;
+let sr;
+try{sr=new API();sr.lang='pl-PL';sr.interimResults=true;sr.continuous=false;recognition=sr;}catch(e){status.textContent='Nie można rozpocząć rozpoznawania. Użyj mikrofonu klawiatury.';return;}
+sr.onstart=()=>{started=true;status.textContent='Słucham… Powiedz fikcyjne zdanie. Dotknij ponownie, aby zakończyć.';btn.textContent='■ Zakończ dyktowanie'};
+sr.onresult=event=>{
+let finalized='',temporary='';
+for(let i=0;i<event.results.length;i++){let phrase=event.results[i][0].transcript;if(event.results[i].isFinal)finalized+=phrase+' ';else temporary+=phrase+' ';}
+full=finalized.trim();
+input.value=[base,full,temporary.trim()].filter(Boolean).join(' ');
+status.textContent='Rozpoznaję… Możesz poprawić tekst przed zapisaniem.';
+};
+sr.onerror=event=>{failed=true;status.textContent='Dyktowanie w przeglądarce nie działa ('+event.error+'). Dotknij „Klawiatura / mikrofon”, a następnie mikrofonu na klawiaturze.';};
+sr.onend=()=>{
+if(recognition===sr)recognition=null;
+btn.textContent='🎙 Dyktuj w przeglądarce';
+if(full){input.value=[base,full].filter(Boolean).join(' ');originalDraft=[originalDraft,full].filter(Boolean).join(' ');}
+else if(!failed)status.textContent=started?'Nie rozpoznano wypowiedzi. Spróbuj mikrofonu klawiatury.':'Przeglądarka nie rozpoczęła nasłuchiwania. Użyj mikrofonu klawiatury.';
+};
+status.textContent='Uruchamiam mikrofon… Jeśli nie wystartuje, użyj mikrofonu klawiatury.';
+try{sr.start()}catch(e){recognition=null;btn.textContent='🎙 Dyktuj w przeglądarce';status.textContent='Safari nie pozwoliło uruchomić dyktowania: '+e.message+'. Użyj mikrofonu klawiatury.';}
 }
 function storeEntry(){let text=document.getElementById('entryText').value.trim(),topic=document.getElementById('topic').value.trim(),date=document.getElementById('date').value;
 if(!text||!date){alert('Dodaj datę i treść wpisu.');return}
@@ -126,7 +141,7 @@ function editEntry(){let r=records.find(x=>x.id===selectedId);editId=r.id;mood=r
 function removeEntry(){if(confirm('Czy na pewno usunąć wpis?')){records=records.filter(x=>x.id!==selectedId);save();openView('history')}}
 function averages(){let cutoff=new Date();cutoff.setDate(cutoff.getDate()-period+1);cutoff.setHours(0,0,0,0);let rec=records.filter(r=>new Date(r.date+'T12:00:00')>=cutoff),by={};rec.forEach(r=>(by[r.date]??=[]).push(r.mood));let days=Object.entries(by).sort((a,b)=>a[0].localeCompare(b[0])).map(([day,v])=>({day,score:v.reduce((a,b)=>a+b,0)/v.length}));return {rec,days,avg:days.length?(days.reduce((a,d)=>a+d.score,0)/days.length).toFixed(1).replace('.',','):'—'}}
 function analysis(){let {rec,days,avg}=averages();let bars=days.map(d=>'<div class="barwrap"><div class="bar" style="height:'+((d.score/7)*100)+'%"></div><span>'+new Date(d.day+'T12:00:00').toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'})+'</span></div>').join('');let topics={};rec.forEach(r=>{let t=r.topic||'Bez tematu';topics[t]=(topics[t]||0)+1});return '<h1>Analiza samopoczucia</h1><section class="card"><label>Okres</label><select id="period" onchange="period=Number(this.value);render()"><option value="7" '+(period===7?'selected':'')+'>Ostatnie 7 dni</option><option value="30" '+(period===30?'selected':'')+'>Ostatnie 30 dni</option><option value="90" '+(period===90?'selected':'')+'>Ostatnie 90 dni</option></select><div class="toolbar"><button class="secondary" onclick="extended=false;render()">Prosta '+(!extended?'✓':'')+'</button><button class="secondary" onclick="extended=true;render()">Rozszerzona '+(extended?'✓':'')+'</button></div><div class="stats"><div class="stat"><span class="mini">Średnia dzienna</span><br><b>'+avg+'/7</b></div><div class="stat"><span class="mini">Liczba wpisów</span><br><b>'+rec.length+'</b></div></div><p class="muted">Oceny z '+days.length+' dni z zapisami. Brak wpisu nie oznacza złego samopoczucia.</p>'+(extended?'<h2>Ocena w czasie</h2><div class="chart">'+bars+'</div><h2>Tematy</h2>'+Object.entries(topics).map(([t,n])=>'<p>'+esc(t)+': <b>'+n+'</b></p>').join('')+'<h2>Wpisy z okresu</h2>'+list(rec.sort((a,b)=>b.date.localeCompare(a.date))):'<p>'+ (rec.length?'Otwórz analizę rozszerzoną, aby obejrzeć oceny dzienne i tematy.':'Zapisz kilka obserwacji, aby zobaczyć podsumowanie.')+'</p>')+'</section>'}
-function more(){return '<h1>Więcej</h1><section class="card"><h2>O prototypie • wersja 0.3</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button><button class="secondary push" onclick="clearDemo()">Usuń wszystkie wpisy demonstracyjne</button></section>'}
+function more(){return '<h1>Więcej</h1><section class="card"><h2>O prototypie • wersja 0.3.1</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button><button class="secondary push" onclick="clearDemo()">Usuń wszystkie wpisy demonstracyjne</button></section>'}
 function addDemo(){if(records.length&&!confirm('Dodać fikcyjne wpisy do istniejącej historii?'))return;let data=[['Po spacerze','Dziś miałem więcej energii i byłem spokojny.',6,0],['Po gorszej nocy','Rano czułem się senny i zmęczony.',3,1],['Zwykły dzień','Dobre samopoczucie, bez większych dolegliwości.',5,2]];data.forEach(([topic,text,mood,offset])=>{let d=new Date();d.setDate(d.getDate()-offset);records.push({id:Date.now()+'-'+offset+'-'+Math.random(),topic,text,mood,date:d.toISOString().slice(0,10)})});save();openView('history')}
 function clearDemo(){if(confirm('Usunąć wszystkie wpisy z tej przeglądarki?')){records=[];save();openView('home')}}
 function render(){try{document.getElementById('app').innerHTML=header()+(view==='home'?home():view==='write'?write():view==='history'?history():view==='detail'?detail():view==='analysis'?analysis():more());boxNav()}catch(e){showDiagnostic(e.message)}}
