@@ -35,6 +35,24 @@ textarea{min-height:145px}
 .stat{background:#eaf0df;padding:16px}
 @media(max-width:370px){.face{font-size:20px;min-height:58px}.name{font-size:22px}.tile{font-size:15px}#app{padding-left:12px;padding-right:12px}}
 
+
+/* v0.2.1: poprawki na iPhone i mniejsze elementy */
+@media(max-width:600px){
+ #app{padding-top:max(72px, calc(env(safe-area-inset-top, 0px) + 17px));}
+ .name{font-size:clamp(19px,5.3vw,25px)}
+ header .muted{font-size:12px;line-height:1.3}
+ .logo{width:46px;height:51px;flex-shrink:0}
+ header{gap:13px}
+ h1{font-size:clamp(23px,6vw,28px)}
+ .tile{min-height:102px;padding:13px 5px;font-size:clamp(14px,4.2vw,17px)}
+ .tile span{font-size:23px}
+ .face{min-height:55px;padding:7px 0;font-size:clamp(18px,5.7vw,24px)}
+ nav button{min-height:52px}
+ nav button span{font-size:22px}
+ .card{padding:16px}
+ .primary{min-height:54px;font-size:18px}
+}
+
 </style></head><body><main id="app"></main><nav id="nav"></nav><script>
 const EM=['😫','😟','🙁','😐','🙂','😊','😄'];const KEY='pz_demo_01';let records=[];try{records=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){};let view='home',mood=4,editId=null,selectedId=null,extended=false,search='',period=7;
 function el(s){return document.createElement('div')}function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
