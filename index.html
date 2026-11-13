@@ -69,19 +69,73 @@ textarea{min-height:145px}
   appearance:none;
 }
 .modeRow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.modeRow .secondary{padding:10px 5px;font-size:15px}.modeRow .chosen{background:#dfeecf;border:2px solid #2f754b}.previewBox{background:#eef3e6;border:1px solid #d0dfc5;padding:13px;border-radius:12px;line-height:1.5}.previewBox p{margin-bottom:0}#clarifyPanel{padding:12px;border:1px solid #e1decf;border-radius:12px;margin-top:10px}#clarifyPanel[hidden],#smartPanel[hidden]{display:none}#clarifyExtra{min-height:75px}.observations{padding-left:24px;line-height:1.6}.observations li{margin:7px 0}.previewBox p{margin-top:7px}#smartPreview:empty:before{content:'Wpisz lub podyktuj tekst, aby zobaczyć podgląd.';color:#607468}.sleepScores{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin-top:8px}.sleepChoice{min-height:50px;border:1px solid #cfddc5;border-radius:12px;background:#f5eddb;color:#254633;font-weight:700}.sleepChoice.chosen{background:#dcecc9;border:2px solid #257647}.sleepChoice:focus-visible{outline:3px solid #d8994e}.version-label{display:inline-block;vertical-align:middle;font-family:system-ui,sans-serif;font-size:12px;font-weight:700;color:#2d6748;background:#e2edd7;border:1px solid #c5d8be;border-radius:9px;padding:3px 6px;white-space:nowrap;margin-left:3px}@media(max-width:390px){.version-label{font-size:10px;padding:2px 4px}}.extras{margin:22px 0 16px;border:1px solid #cbdcc4;border-radius:19px;background:#f4f7ed;overflow:hidden}.extras summary{list-style:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:17px 16px;font-size:18px;font-weight:750;cursor:pointer;min-height:62px;background:#e7efdf;color:#265239}.extras summary::-webkit-details-marker{display:none}.extras summary:after{content:"⌄";font-size:25px;margin-left:auto}.extras[open] summary:after{content:"⌃"}.extras summary .smallHint{width:100%;font-size:13px;color:#647868;font-weight:450}.extras .extraBody{padding:12px;display:grid;gap:12px}.ratingPanel{padding:15px 11px 12px;border:1px solid;border-radius:17px}.ratingPanel h2{font-size:20px;margin:0 0 4px}.ratingPanel .muted{margin:4px 0 8px;font-size:13px}.ratingPanel .sleepScores{gap:4px}.ratingPanel .sleepChoice{border-radius:12px;min-height:48px;background:#ffffffb8;border-color:#cfddc5;font-size:19px;padding:2px}.ratingPanel .sleepChoice.chosen{background:#daefd4;border-color:#31794e}.ratingPanel label{display:none}.ratingSleep{background:#e9effa;border-color:#cddbf0}.ratingSleep .sleepChoice.chosen{background:#c9dcf8;border-color:#6d8fca}.ratingEnergy{background:#fff2d8;border-color:#eadbb0}.ratingEnergy .sleepChoice.chosen{background:#ffe3a2;border-color:#bb8a2a}.ratingStress{background:#f7e8e5;border-color:#e9c9c3}.ratingStress .sleepChoice.chosen{background:#f2cfc8;border-color:#bd766b}</style></head><body><main id="app"></main><nav id="nav"></nav><script>
-const EM=['😫','😟','🙁','😐','🙂','😊','😄'];const KEY='pz_demo_01';let records=[];try{records=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){};let view='home',mood=4,editId=null,selectedId=null,extended=false,search='',period=7;let voiceSession=null,originalDraft='',recognition=null;let entryMode='literal';let smartLastSource=null;let sleepScore=null,energyScore=null,stressScore=null;
+const EM=['😫','😟','🙁','😐','🙂','😊','😄'];const KEY='pz_demo_01';let records=[],storageDiagnostic='';let originalStoredRaw=null;
+try{
+ originalStoredRaw=localStorage.getItem(KEY);
+ if(originalStoredRaw!==null){
+  const parsed=JSON.parse(originalStoredRaw);
+  if(Array.isArray(parsed))records=parsed;
+  else storageDiagnostic='Znaleziono zapis w nietypowym formacie. Nie nadpisuj go.';
+ }
+}catch(e){storageDiagnostic='Nie udało się odczytać zapisanej historii. Dane nie zostały nadpisane.';}let view='home',mood=4,editId=null,selectedId=null,extended=false,search='',period=7;let voiceSession=null,originalDraft='',recognition=null;let entryMode='literal';let smartLastSource=null;let sleepScore=null,energyScore=null,stressScore=null;
 if(!Array.isArray(records))records=[];
-records=records.filter(r=>r&&typeof r==='object'&&typeof r.text==='string'&&typeof r.date==='string'&&Number.isFinite(Number(r.mood))&&Number(r.mood)>=1&&Number(r.mood)<=7);
+let incompatibleRecords=records.filter(r=>!(r&&typeof r==='object'&&typeof r.text==='string'&&typeof r.date==='string'&&Number.isFinite(Number(r.mood))&&Number(r.mood)>=1&&Number(r.mood)<=7)).length;
+if(incompatibleRecords)storageDiagnostic='Wykryto '+incompatibleRecords+' starszych wpisów o innej strukturze. Zapisz kopię danych przed dalszą edycją.';
+records=records.filter(r=>r&&typeof r==='object').map((r,i)=>{
+ const item={...r};
+ item.id=String(item.id||('legacy-'+i));
+ item.date=typeof item.date==='string'?item.date:(typeof item.createdAt==='string'?item.createdAt.slice(0,10):'2000-01-01');
+ item.text=typeof item.text==='string'?item.text:(typeof item.originalText==='string'?item.originalText:(typeof item.content==='string'?item.content:'[Wpis ze starszej wersji — brak zgodnego pola tekstu]'));
+ item.topic=typeof item.topic==='string'?item.topic:'';
+ item.mood=Number(item.mood)>=1&&Number(item.mood)<=7?Number(item.mood):4;
+ return item;
+});
 window.addEventListener('error',function(e){showDiagnostic(e.message||'Nieznany błąd');});
 window.addEventListener('unhandledrejection',function(e){showDiagnostic((e.reason&&e.reason.message)||'Błąd przetwarzania');});
 function showDiagnostic(msg){let node=document.getElementById('app');if(node){node.innerHTML='<section class="card" style="margin-top:18px"><h1>Nie udało się otworzyć pamiętnika</h1><p>Twoje dotychczasowe wpisy nie zostały usunięte.</p><p class="mini">Błąd: '+esc(msg)+'</p><button class="primary" onclick="location.reload()">Spróbuj ponownie</button></section>';}}
 
 function el(s){return document.createElement('div')}function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function save(){localStorage.setItem(KEY,JSON.stringify(records))}function dt(x){return new Date(x).toLocaleDateString('pl-PL',{day:'numeric',month:'long',year:'numeric'})}
+function save(){
+ try{
+  if(storageDiagnostic&&originalStoredRaw&&!sessionStorage.getItem('pz_backup_before_save')){
+   sessionStorage.setItem('pz_backup_before_save',originalStoredRaw);
+  }
+  localStorage.setItem(KEY,JSON.stringify(records));
+ }catch(e){alert('Nie udało się zapisać wpisu w pamięci przeglądarki. Sprawdź wolne miejsce i spróbuj ponownie.');throw e;}
+}
+function storageInfo(){
+let list=[];
+try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&(/pz|pamietnik|zdrow/i).test(k)){let raw=localStorage.getItem(k),n='?';try{let obj=JSON.parse(raw);n=Array.isArray(obj)?obj.length:'inny format'}catch(e){}list.push(k+': '+n+' wpisów')}}}catch(e){}
+return list.length?list.join(' • '):'Brak lokalnych zapisów pamiętnika w tej sesji przeglądarki';
+}
+function exportDemo(){
+ if(!confirm('Eksport jest NIEZASZYFROWANY. Korzystaj wyłącznie z fikcyjnych danych testowych. Zapisać kopię do pliku JSON?'))return;
+ const payload={format:'PamietnikZdrowiaDemo',version:1,exportedAt:new Date().toISOString(),records};
+ const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Pamietnik_Zdrowia_TEST_kopia_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function importDemo(event){
+ const file=event.target.files&&event.target.files[0];if(!file)return;
+ const reader=new FileReader();
+ reader.onload=()=>{
+  try{
+   const data=JSON.parse(reader.result);
+   if(data.format!=='PamietnikZdrowiaDemo'||!Array.isArray(data.records))throw Error('Nieprawidłowy format kopii');
+   const restored=data.records.filter(r=>r&&typeof r==='object'&&typeof r.text==='string'&&typeof r.date==='string'&&Number(r.mood)>=1&&Number(r.mood)<=7);
+   if(!restored.length)throw Error('Nie znaleziono zgodnych wpisów');
+   if(!confirm('Przywrócić '+restored.length+' wpisów? Istniejące wpisy zostaną zachowane.'))return;
+   const seen=new Set(records.map(r=>String(r.id)));let added=0;
+   for(const r of restored){if(!seen.has(String(r.id))){records.push(r);seen.add(String(r.id));added++;}}
+   save();alert('Przywrócono '+added+' nowych wpisów.');openView('history');
+  }catch(e){alert('Nie udało się przywrócić pliku: '+e.message)}
+ };
+ reader.readAsText(file);event.target.value='';
+}
+function dt(x){return new Date(x).toLocaleDateString('pl-PL',{day:'numeric',month:'long',year:'numeric'})}
 function faces(v){return '<div class="faces">'+EM.map((e,i)=>'<button class="face '+(v===i+1?'active':'')+'" onclick="setMood('+(i+1)+')">'+e+'<small>'+(i+1)+'</small></button>').join('')+'</div>'}
 function openView(v){if(recognition){try{recognition.stop()}catch(e){}recognition=null}view=v;render();scrollTo(0,0)}
 function setMood(n){mood=n;document.querySelectorAll('.face').forEach((b,i)=>b.classList.toggle('active',i===n-1));document.querySelectorAll('.selectedMood').forEach(e=>e.textContent='Wybrana ocena: '+mood+'/7')}
-function header(){return '<header><div class="logo">📖</div><div><div class="name">Pamiętnik Zdrowia <span class="version-label">v0.8</span></div><div class="muted">Twój prywatny dziennik samopoczucia</div></div></header>'}
+function header(){return '<header><div class="logo">📖</div><div><div class="name">Pamiętnik Zdrowia <span class="version-label">v0.8.1</span></div><div class="muted">Twój prywatny dziennik samopoczucia</div></div></header>'}
 function boxNav(){let navs=[['home','⌂','Start'],['write','✎','Wpis'],['history','▤','Historia'],['analysis','▥','Analiza'],['more','⚙','Więcej']];document.getElementById('nav').innerHTML=navs.map(([id,ico,label])=>'<button class="'+(view===id?'active':'')+'" onclick="openView(\''+id+'\')"><span>'+ico+'</span>'+label+'</button>').join('')}
 function home(){return '<section class="card"><h1>Jak się dzisiaj czujesz?</h1><p class="muted">Wybierz buźkę i zapisz swoją obserwację.</p>'+faces(mood)+'<p class="muted center selectedMood">Wybrana ocena: '+mood+'/7</p><button class="primary" onclick="newEntry()">🎙 Nowy wpis</button></section><div class="grid"><button class="tile" onclick="openView(\'history\')"><span>📖</span>Historia wpisów</button><button class="tile" onclick="openView(\'analysis\')"><span>📊</span>Analiza samopoczucia</button><button class="tile" onclick="openView(\'history\')"><span>🔎</span>Szukaj w pamiętniku</button><button class="tile" onclick="openView(\'more\')"><span>🔒</span>Ustawienia</button></div><section class="card push"><h2>Ostatnie wpisy</h2>'+list(records.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3))+'</section>'}
 
@@ -118,7 +172,7 @@ if(editId){let r=records.find(x=>x.id===editId);if(!r)return;Object.assign(r,{te
 else records.push({id:Date.now()+'-'+Math.random().toString(36).slice(2),date,text,originalText:text,topic,mood,sleepScore,energyScore,stressScore,mode:'literal',tags:[]});
 save();editId=null;openView('history')}
 function list(arr){return arr.length?arr.map(r=>'<button class="entry" onclick="showDetail(\''+r.id+'\')"><div class="row"><span class="mini">'+dt(r.date)+'</span><span class="score">'+EM[r.mood-1]+' '+r.mood+'/7</span></div><strong>'+esc(r.topic||'Samopoczucie')+'</strong><p class="mini">'+esc(r.text.slice(0,120))+(r.text.length>120?'…':'')+'</p></button>').join(''):'<p class="muted">Nie ma jeszcze wpisów. Dodaj pierwszy wpis, aby zobaczyć historię.</p>'}
-function history(){let s=search.toLocaleLowerCase('pl');let rs=records.filter(r=>(r.text+' '+r.topic).toLocaleLowerCase('pl').includes(s)).sort((a,b)=>b.date.localeCompare(a.date));return '<h1>Historia wpisów</h1><input id="search" placeholder="Szukaj objawu lub tematu" value="'+esc(search)+'" oninput="search=this.value;refreshList()"><div id="results">'+list(rs)+'</div>'}
+function history(){let s=search.toLocaleLowerCase('pl');let rs=records.filter(r=>(r.text+' '+r.topic).toLocaleLowerCase('pl').includes(s)).sort((a,b)=>b.date.localeCompare(a.date));return '<h1>Historia wpisów</h1>'+(storageDiagnostic?'<p class="notice">'+esc(storageDiagnostic)+'</p>':'')+'<p class="mini muted">Zapisów w tej przeglądarce: '+records.length+'</p><input id="search" placeholder="Szukaj objawu lub tematu" value="'+esc(search)+'" oninput="search=this.value;refreshList()"><div id="results">'+list(rs)+'</div>'}
 function refreshList(){let c=document.getElementById('results');if(c)c.innerHTML=list(records.filter(r=>(r.text+' '+r.topic).toLocaleLowerCase('pl').includes(search.toLocaleLowerCase('pl'))).sort((a,b)=>b.date.localeCompare(a.date)))}
 function showDetail(id){selectedId=id;openView('detail')}
 function detail(){let r=records.find(x=>x.id===selectedId);if(!r)return '<p>Nie znaleziono wpisu.</p>';return '<button class="secondary" onclick="openView(\'history\')">← Historia</button><section class="card push"><div class="row"><span>'+dt(r.date)+'</span><strong class="score">'+EM[r.mood-1]+' '+r.mood+'/7</strong></div><h1>'+esc(r.topic||'Samopoczucie')+'</h1>'+(r.sleepScore?'<p><strong>Sen:</strong> '+r.sleepScore+'/7</p>':'')+(r.energyScore?'<p><strong>Energia:</strong> '+r.energyScore+'/7</p>':'')+(r.stressScore?'<p><strong>Stres:</strong> '+r.stressScore+'/7</p>':'')+'<h2>Treść wpisu</h2><div class="details">'+esc(r.text)+'</div>'+(r.originalText&&r.originalText!==r.text?'<details class="push"><summary>Oryginalny tekst dyktowania</summary><p class="details">'+esc(r.originalText)+'</p></details>':'')+'<div class="toolbar push"><button class="secondary" onclick="editEntry()">✎ Edytuj</button><button class="secondary" onclick="removeEntry()">Usuń</button></div></section>'}
@@ -126,7 +180,7 @@ function editEntry(){let r=records.find(x=>x.id===selectedId);editId=r.id;mood=r
 function removeEntry(){if(confirm('Czy na pewno usunąć wpis?')){records=records.filter(x=>x.id!==selectedId);save();openView('history')}}
 function averages(){let cutoff=new Date();cutoff.setDate(cutoff.getDate()-period+1);cutoff.setHours(0,0,0,0);let rec=records.filter(r=>new Date(r.date+'T12:00:00')>=cutoff),by={};rec.forEach(r=>(by[r.date]??=[]).push(r.mood));let days=Object.entries(by).sort((a,b)=>a[0].localeCompare(b[0])).map(([day,v])=>({day,score:v.reduce((a,b)=>a+b,0)/v.length}));return {rec,days,avg:days.length?(days.reduce((a,d)=>a+d.score,0)/days.length).toFixed(1).replace('.',','):'—'}}
 function analysis(){let {rec,days,avg}=averages();let bars=days.map(d=>'<div class="barwrap"><div class="bar" style="height:'+((d.score/7)*100)+'%"></div><span>'+new Date(d.day+'T12:00:00').toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'})+'</span></div>').join('');let topics={};rec.forEach(r=>{let t=r.topic||'Bez tematu';topics[t]=(topics[t]||0)+1});return '<h1>Analiza samopoczucia</h1><section class="card"><label>Okres</label><select id="period" onchange="period=Number(this.value);render()"><option value="7" '+(period===7?'selected':'')+'>Ostatnie 7 dni</option><option value="30" '+(period===30?'selected':'')+'>Ostatnie 30 dni</option><option value="90" '+(period===90?'selected':'')+'>Ostatnie 90 dni</option></select><div class="toolbar"><button class="secondary" onclick="extended=false;render()">Prosta '+(!extended?'✓':'')+'</button><button class="secondary" onclick="extended=true;render()">Rozszerzona '+(extended?'✓':'')+'</button></div><div class="stats"><div class="stat"><span class="mini">Średnia dzienna</span><br><b>'+avg+'/7</b></div><div class="stat"><span class="mini">Liczba wpisów</span><br><b>'+rec.length+'</b></div></div><p class="muted">Oceny z '+days.length+' dni z zapisami. Brak wpisu nie oznacza złego samopoczucia.</p>'+(extended?'<h2>Ocena w czasie</h2><div class="chart">'+bars+'</div><h2>Tematy</h2>'+Object.entries(topics).map(([t,n])=>'<p>'+esc(t)+': <b>'+n+'</b></p>').join('')+'<h2>Wpisy z okresu</h2>'+list(rec.sort((a,b)=>b.date.localeCompare(a.date))):'<p>'+ (rec.length?'Otwórz analizę rozszerzoną, aby obejrzeć oceny dzienne i tematy.':'Zapisz kilka obserwacji, aby zobaczyć podsumowanie.')+'</p>')+'</section>'}
-function more(){return '<h1>Więcej</h1><section class="card"><h2>O prototypie • wersja 0.8</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button><button class="secondary push" onclick="clearDemo()">Usuń wszystkie wpisy demonstracyjne</button></section>'}
+function more(){return '<h1>Więcej</h1><section class="card"><h2>Odzyskiwanie historii testowej</h2><p class="mini">'+esc(storageInfo())+'</p>'+(storageDiagnostic?'<p class="notice">'+esc(storageDiagnostic)+'</p>':'')+'<div class="toolbar"><button class="secondary" onclick="exportDemo()">Pobierz kopię JSON</button><button class="secondary" onclick="document.getElementById(\'importFile\').click()">Przywróć kopię</button></div><input type="file" accept=".json,application/json" id="importFile" onchange="importDemo(event)" style="display:none"><p class="mini muted">Kopia jest nieszyfrowana. Nie używaj prawdziwych informacji zdrowotnych. Jeśli Safari usunęło dane trybu prywatnego, aplikacja nie odtworzy ich bez wcześniejszej kopii.</p></section><section class="card"><h2>O prototypie • wersja 0.8.1</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button><button class="secondary push" onclick="clearDemo()">Usuń wszystkie wpisy demonstracyjne</button></section>'}
 function addDemo(){if(records.length&&!confirm('Dodać fikcyjne wpisy do istniejącej historii?'))return;let data=[['Po spacerze','Dziś miałem więcej energii i byłem spokojny.',6,0],['Po gorszej nocy','Rano czułem się senny i zmęczony.',3,1],['Zwykły dzień','Dobre samopoczucie, bez większych dolegliwości.',5,2]];data.forEach(([topic,text,mood,offset])=>{let d=new Date();d.setDate(d.getDate()-offset);records.push({id:Date.now()+'-'+offset+'-'+Math.random(),topic,text,mood,date:d.toISOString().slice(0,10)})});save();openView('history')}
 function clearDemo(){if(confirm('Usunąć wszystkie wpisy z tej przeglądarki?')){records=[];save();openView('home')}}
 function render(){try{document.getElementById('app').innerHTML=header()+(view==='home'?home():view==='write'?write():view==='history'?history():view==='detail'?detail():view==='analysis'?analysis():more());boxNav();}catch(e){showDiagnostic(e.message)}}
