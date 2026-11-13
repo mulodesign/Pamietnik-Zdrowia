@@ -79,7 +79,7 @@ try{
 }catch(e){installId='BRAK';}
 function storageStatus(){
  return '<div class="storageStatus"><strong>Kontrola pamięci</strong><p class="mini">Identyfikator: <b>'+esc(installId)+'</b> • Wpisy: <b>'+records.length+'</b></p>'+
- '<p class="mini">'+(storageReady?'Pamięć działa w tej chwili, ale to nie gwarantuje zachowania wpisów po zamknięciu przeglądarki.':'Uwaga: pamięć przeglądarki jest niedostępna.')+'</p>'+
+ '<p class="mini">Baza IndexedDB: <b>'+(dbReady?'działa':'niedostępna '+esc(dbError))+'</b></p><p class="mini">Safari nadal może usunąć dane obu magazynów. Regularnie pobieraj kopię.</p>'+
  '<p class="mini">Jeżeli przy następnym uruchomieniu identyfikator będzie inny, otwarto inną pamięć lub poprzednia została wyczyszczona.</p></div>';
 }
 let records=[],storageDiagnostic='';let originalStoredRaw=null;
@@ -108,16 +108,12 @@ window.addEventListener('unhandledrejection',function(e){showDiagnostic((e.reaso
 function showDiagnostic(msg){let node=document.getElementById('app');if(node){node.innerHTML='<section class="card" style="margin-top:18px"><h1>Nie udało się otworzyć pamiętnika</h1><p>Twoje dotychczasowe wpisy nie zostały usunięte.</p><p class="mini">Błąd: '+esc(msg)+'</p><button class="primary" onclick="location.reload()">Spróbuj ponownie</button></section>';}}
 
 function el(s){return document.createElement('div')}function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function save(candidate){
- try{
-  if(storageDiagnostic&&originalStoredRaw){try{if(!sessionStorage.getItem('pz_backup_before_save'))sessionStorage.setItem('pz_backup_before_save',originalStoredRaw)}catch(e){}}
-  if(!storageReady)throw Error('Pamięć nie działa');
-  const serialized=JSON.stringify(candidate);
-  localStorage.setItem(KEY,serialized);
-  if(localStorage.getItem(KEY)!==serialized)throw Error('Verification failed');
-  records=candidate;return true;
- }catch(e){alert('Nie udało się zapisać. Dotychczasowe wpisy pozostają bez zmian.');return false;}
-}
+let dbReady=false,dbError='',dbInstance=null,storageBusy=false;
+function openDiaryDb(){return new Promise((resolve,reject)=>{if(!('indexedDB' in window))return reject(Error('IndexedDB niedostępna'));const q=indexedDB.open('PamietnikZdrowia',1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('snapshots'))q.result.createObjectStore('snapshots')};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error||Error('Błąd bazy'));q.onblocked=()=>reject(Error('Baza zablokowana'))})}
+function readDiaryDb(db){return new Promise((resolve,reject)=>{const q=db.transaction('snapshots','readonly').objectStore('snapshots').get('current');q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error||Error('Błąd odczytu'))})}
+function writeDiaryDb(db,snap){return new Promise((resolve,reject)=>{const tx=db.transaction('snapshots','readwrite');tx.objectStore('snapshots').put(snap,'current');tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error||Error('Błąd zapisu'));tx.onabort=()=>reject(tx.error||Error('Przerwany zapis'))})}
+async function initializeDiary(){try{dbInstance=await openDiaryDb();let snap=await readDiaryDb(dbInstance);dbReady=true;if(snap&&Array.isArray(snap.records)){records=snap.records;try{localStorage.setItem(KEY,JSON.stringify(records))}catch(e){}}else if(records.length){await writeDiaryDb(dbInstance,{records,updatedAt:Date.now()})}}catch(e){dbError=e.message;storageDiagnostic='Baza IndexedDB nie działa — wykonaj kopię JSON.'}finally{render()}}
+async function save(candidate){if(storageBusy)return false;storageBusy=true;try{const raw=JSON.stringify(candidate);if(dbReady)await writeDiaryDb(dbInstance,{records:candidate,updatedAt:Date.now()});else if(!storageReady)throw Error('Brak pamięci');let localOk=false;try{localStorage.setItem(KEY,raw);localOk=localStorage.getItem(KEY)===raw}catch(e){}if(!localOk&&!dbReady)throw Error('Nie zapisano');records=candidate;if(!dbReady||!localOk)storageDiagnostic='Jeden z magazynów danych nie działa — pobierz kopię JSON.';return true}catch(e){alert('Nie udało się zapisać. Nie opuszczaj formularza.');return false}finally{storageBusy=false}}
 function todayLocal(){const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
 function storageInfo(){
 let list=[];
@@ -133,7 +129,7 @@ function exportDemo(){
 function importDemo(event){
  const file=event.target.files&&event.target.files[0];if(!file)return;
  const reader=new FileReader();
- reader.onload=()=>{
+ reader.onload=async ()=>{
   try{
    const data=JSON.parse(reader.result);
    if(data.format!=='PamietnikZdrowiaDemo'||!Array.isArray(data.records))throw Error('Nieprawidłowy format kopii');
@@ -142,7 +138,7 @@ function importDemo(event){
    if(!confirm('Przywrócić '+restored.length+' wpisów? Istniejące wpisy zostaną zachowane.'))return;
    const next=records.slice(),seen=new Set(next.map(r=>String(r.id)));let added=0;
    for(const r of restored){if(!seen.has(String(r.id))){next.push(r);seen.add(String(r.id));added++;}}
-   if(save(next)){alert('Przywrócono '+added+' nowych wpisów.');openView('history');}
+   if(await save(next)){alert('Przywrócono '+added+' nowych wpisów.');openView('history');}
   }catch(e){alert('Nie udało się przywrócić pliku: '+e.message)}
  };
  reader.readAsText(file);event.target.value='';
@@ -151,7 +147,7 @@ function dt(x){return new Date(x).toLocaleDateString('pl-PL',{day:'numeric',mont
 function faces(v){return '<div class="faces">'+EM.map((e,i)=>'<button class="face '+(v===i+1?'active':'')+'" onclick="setMood('+(i+1)+')">'+e+'<small>'+(i+1)+'</small></button>').join('')+'</div>'}
 function openView(v){if(recognition){try{recognition.stop()}catch(e){}recognition=null}view=v;render();scrollTo(0,0)}
 function setMood(n){mood=n;document.querySelectorAll('.face').forEach((b,i)=>b.classList.toggle('active',i===n-1));document.querySelectorAll('.selectedMood').forEach(e=>e.textContent='Wybrana ocena: '+mood+'/7')}
-function header(){return '<header><div class="logo">📖</div><div><div class="name">Pamiętnik Zdrowia <span class="version-label">v0.8.3</span></div><div class="muted">Twój prywatny dziennik samopoczucia</div></div></header>'}
+function header(){return '<header><div class="logo">📖</div><div><div class="name">Pamiętnik Zdrowia <span class="version-label">v0.9.0</span></div><div class="muted">Twój prywatny dziennik samopoczucia</div></div></header>'}
 function boxNav(){let navs=[['home','⌂','Start'],['write','✎','Wpis'],['history','▤','Historia'],['analysis','▥','Analiza'],['more','⚙','Więcej']];document.getElementById('nav').innerHTML=navs.map(([id,ico,label])=>'<button class="'+(view===id?'active':'')+'" onclick="'+(id==='write'?'newEntry()':'openView(\''+id+'\')')+'"><span>'+ico+'</span>'+label+'</button>').join('')}
 function home(){return '<section class="storageBanner"><strong>⚠️ Historia testowa</strong><p>Wpisy mogą zniknąć po zamknięciu prywatnej lub wbudowanej przeglądarki. Otwieraj aplikację zawsze w zwykłej karcie Safari i zapisuj kopię.</p><button type="button" class="secondary" onclick="exportDemo()" '+(records.length?'':'disabled')+'>📥 Kopia wpisów ('+records.length+')</button></section><section class="card"><h1>Jak się dzisiaj czujesz?</h1><p class="muted">Wybierz buźkę i zapisz swoją obserwację.</p>'+faces(mood)+'<p class="muted center selectedMood">Wybrana ocena: '+mood+'/7</p><button class="primary" onclick="newEntry()">🎙 Nowy wpis</button></section><div class="grid"><button class="tile" onclick="openView(\'history\')"><span>📖</span>Historia wpisów</button><button class="tile" onclick="openView(\'analysis\')"><span>📊</span>Analiza samopoczucia</button><button class="tile" onclick="openView(\'history\')"><span>🔎</span>Szukaj w pamiętniku</button><button class="tile" onclick="openView(\'more\')"><span>🔒</span>Ustawienia</button></div><section class="card push"><h2>Ostatnie wpisy</h2>'+list(records.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3))+'</section>'}
 
@@ -181,14 +177,14 @@ function write(){const r=records.find(x=>x.id===editId),dd=r?.date||todayLocal()
 '<div class="notice push">Wersja demonstracyjna nie ma jeszcze szyfrowania i PIN-u. Dyktowanie systemowe może korzystać z usług sieciowych. Używaj wyłącznie fikcyjnych informacji.</div>'+
 '<button class="primary push" type="button" onclick="storeEntry()">✓ Zapisz wpis</button></section>'}
 function focusText(){let t=document.getElementById('entryText');t.focus();document.getElementById('voiceStatus').textContent='Dotknij mikrofonu klawiatury. Tekst zostanie zapisany bez redagowania.'}
-function storeEntry(){
+async function storeEntry(){
  const text=document.getElementById('entryText').value.trim(),topic=document.getElementById('topic').value.trim(),date=document.getElementById('date').value;
  if(!text||!date){alert('Dodaj datę i treść wpisu.');return}
  const next=records.slice();
  if(editId){const index=next.findIndex(r=>r.id===editId);if(index<0){alert('Nie znaleziono wpisu');return}
   next[index]={...next[index],text,topic,date,mood,sleepScore,energyScore,stressScore,mode:'literal',tags:[],originalText:text};
  }else next.push({id:Date.now()+'-'+Math.random().toString(36).slice(2),date,text,originalText:text,topic,mood,sleepScore,energyScore,stressScore,mode:'literal',tags:[]});
- if(save(next)){editId=null;openView('history')}
+ if(await save(next)){editId=null;openView('history')}
 }
 function list(arr){return arr.length?arr.map(r=>'<button class="entry" onclick="showDetail(\''+r.id+'\')"><div class="row"><span class="mini">'+dt(r.date)+'</span><span class="score">'+EM[r.mood-1]+' '+r.mood+'/7</span></div><strong>'+esc(r.topic||'Samopoczucie')+'</strong><p class="mini">'+esc(r.text.slice(0,120))+(r.text.length>120?'…':'')+'</p></button>').join(''):'<p class="muted">Nie ma jeszcze wpisów. Dodaj pierwszy wpis, aby zobaczyć historię.</p>'}
 function history(){let s=search.toLocaleLowerCase('pl');let rs=records.filter(r=>(r.text+' '+r.topic).toLocaleLowerCase('pl').includes(s)).sort((a,b)=>b.date.localeCompare(a.date));return '<h1>Historia wpisów</h1>'+storageStatus()+'<div class="historyBackup"><button class="secondary" type="button" onclick="exportDemo()" '+(records.length?'':'disabled')+'>📥 Pobierz kopię wszystkich wpisów</button></div>'+(storageDiagnostic?'<p class="notice">'+esc(storageDiagnostic)+'</p>':'')+'<p class="mini muted">Zapisów w tej przeglądarce: '+records.length+'</p><input id="search" placeholder="Szukaj objawu lub tematu" value="'+esc(search)+'" oninput="search=this.value;refreshList()"><div id="results">'+list(rs)+'</div>'}
@@ -196,22 +192,23 @@ function refreshList(){let c=document.getElementById('results');if(c)c.innerHTML
 function showDetail(id){selectedId=id;openView('detail')}
 function detail(){let r=records.find(x=>x.id===selectedId);if(!r)return '<p>Nie znaleziono wpisu.</p>';return '<button class="secondary" onclick="openView(\'history\')">← Historia</button><section class="card push"><div class="row"><span>'+dt(r.date)+'</span><strong class="score">'+EM[r.mood-1]+' '+r.mood+'/7</strong></div><h1>'+esc(r.topic||'Samopoczucie')+'</h1>'+(r.sleepScore?'<p><strong>Sen:</strong> '+r.sleepScore+'/7</p>':'')+(r.energyScore?'<p><strong>Energia:</strong> '+r.energyScore+'/7</p>':'')+(r.stressScore?'<p><strong>Stres:</strong> '+r.stressScore+'/7</p>':'')+'<h2>Treść wpisu</h2><div class="details">'+esc(r.text)+'</div>'+(r.originalText&&r.originalText!==r.text?'<details class="push"><summary>Oryginalny tekst dyktowania</summary><p class="details">'+esc(r.originalText)+'</p></details>':'')+'<div class="toolbar push"><button class="secondary" onclick="editEntry()">✎ Edytuj</button><button class="secondary" onclick="removeEntry()">Usuń</button></div></section>'}
 function editEntry(){let r=records.find(x=>x.id===selectedId);editId=r.id;mood=r.mood;sleepScore=Number.isInteger(r.sleepScore)?r.sleepScore:null;energyScore=Number.isInteger(r.energyScore)?r.energyScore:null;stressScore=Number.isInteger(r.stressScore)?r.stressScore:null;openView('write')}
-function removeEntry(){
- if(confirm('Na pewno usunąć ten wpis?')&&save(records.filter(r=>r.id!==selectedId)))openView('history');
+async function removeEntry(){
+ if(confirm('Na pewno usunąć ten wpis?')&&await save(records.filter(r=>r.id!==selectedId)))openView('history');
 }
 function averages(){let cutoff=new Date();cutoff.setDate(cutoff.getDate()-period+1);cutoff.setHours(0,0,0,0);let rec=records.filter(r=>new Date(r.date+'T12:00:00')>=cutoff),by={};rec.forEach(r=>(by[r.date]??=[]).push(r.mood));let days=Object.entries(by).sort((a,b)=>a[0].localeCompare(b[0])).map(([day,v])=>({day,score:v.reduce((a,b)=>a+b,0)/v.length}));return {rec,days,avg:days.length?(days.reduce((a,d)=>a+d.score,0)/days.length).toFixed(1).replace('.',','):'—'}}
 function analysis(){let {rec,days,avg}=averages();let bars=days.map(d=>'<div class="barwrap"><div class="bar" style="height:'+((d.score/7)*100)+'%"></div><span>'+new Date(d.day+'T12:00:00').toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'})+'</span></div>').join('');let topics={};rec.forEach(r=>{let t=r.topic||'Bez tematu';topics[t]=(topics[t]||0)+1});return '<h1>Analiza samopoczucia</h1><section class="card"><label>Okres</label><select id="period" onchange="period=Number(this.value);render()"><option value="7" '+(period===7?'selected':'')+'>Ostatnie 7 dni</option><option value="30" '+(period===30?'selected':'')+'>Ostatnie 30 dni</option><option value="90" '+(period===90?'selected':'')+'>Ostatnie 90 dni</option></select><div class="toolbar"><button class="secondary" onclick="extended=false;render()">Prosta '+(!extended?'✓':'')+'</button><button class="secondary" onclick="extended=true;render()">Rozszerzona '+(extended?'✓':'')+'</button></div><div class="stats"><div class="stat"><span class="mini">Średnia dzienna</span><br><b>'+avg+'/7</b></div><div class="stat"><span class="mini">Liczba wpisów</span><br><b>'+rec.length+'</b></div></div><p class="muted">Oceny z '+days.length+' dni z zapisami. Brak wpisu nie oznacza złego samopoczucia.</p>'+(extended?'<h2>Ocena w czasie</h2><div class="chart">'+bars+'</div><h2>Tematy</h2>'+Object.entries(topics).map(([t,n])=>'<p>'+esc(t)+': <b>'+n+'</b></p>').join('')+'<h2>Wpisy z okresu</h2>'+list(rec.sort((a,b)=>b.date.localeCompare(a.date))):'<p>'+ (rec.length?'Otwórz analizę rozszerzoną, aby obejrzeć oceny dzienne i tematy.':'Zapisz kilka obserwacji, aby zobaczyć podsumowanie.')+'</p>')+'</section>'}
-function more(){return '<h1>Więcej</h1>'+storageStatus()+'<section class="card"><h2>Odzyskiwanie historii testowej</h2><p class="mini">'+esc(storageInfo())+'</p>'+(storageDiagnostic?'<p class="notice">'+esc(storageDiagnostic)+'</p>':'')+'<div class="toolbar"><button class="secondary" onclick="exportDemo()">Pobierz kopię JSON</button><button class="secondary" onclick="document.getElementById(\'importFile\').click()">Przywróć kopię</button></div><input type="file" accept=".json,application/json" id="importFile" onchange="importDemo(event)" style="display:none"><p class="mini muted">Kopia jest nieszyfrowana. Nie używaj prawdziwych informacji zdrowotnych. Jeśli Safari usunęło dane trybu prywatnego, aplikacja nie odtworzy ich bez wcześniejszej kopii.</p></section><section class="card"><h2>O prototypie • wersja 0.8.3</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button></section>'}
-function addDemo(){
+function more(){return '<h1>Więcej</h1>'+storageStatus()+'<section class="card"><h2>Odzyskiwanie historii testowej</h2><p class="mini">'+esc(storageInfo())+'</p>'+(storageDiagnostic?'<p class="notice">'+esc(storageDiagnostic)+'</p>':'')+'<div class="toolbar"><button class="secondary" onclick="exportDemo()">Pobierz kopię JSON</button><button class="secondary" onclick="document.getElementById(\'importFile\').click()">Przywróć kopię</button></div><input type="file" accept=".json,application/json" id="importFile" onchange="importDemo(event)" style="display:none"><p class="mini muted">Kopia jest nieszyfrowana. Nie używaj prawdziwych informacji zdrowotnych. Jeśli Safari usunęło dane trybu prywatnego, aplikacja nie odtworzy ich bez wcześniejszej kopii.</p></section><section class="card"><h2>O prototypie • wersja 0.9.0</h2><p>To demonstracja interfejsu Pamiętnika Zdrowia dla rodziny. Dane są zapisywane w pamięci tej przeglądarki, ale <b>nie są zaszyfrowane</b> i mogą zostać usunięte przez przeglądarkę.</p><div class="notice">Nie wprowadzaj rzeczywistych danych dotyczących zdrowia. Ta wersja nie ma jeszcze PIN-u, kopii zapasowych ani bezpiecznej bazy danych.</div><button class="secondary push" onclick="addDemo()">Dodaj fikcyjne wpisy do testów</button></section>'}
+async function addDemo(){
  if(records.length&&!confirm('Dodać fikcyjne wpisy do istniejącej historii?'))return;
  const sample=[['Po spacerze','Dziś miałem więcej energii i byłem spokojny.',6,0],['Po gorszej nocy','Rano czułem się senny i zmęczony.',3,1],['Zwykły dzień','Dobre samopoczucie, bez większych dolegliwości.',5,2]];
  const next=records.slice();
  for(const [topic,text,mood,offset] of sample){const d=new Date();d.setDate(d.getDate()-offset);const date=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
  next.push({id:Date.now()+'-'+offset+'-'+Math.random(),topic,text,mood,date});}
- if(save(next))openView('history');
+ if(await save(next))openView('history');
 }
 function clearDemo(){alert('Dla ochrony historii zbiorcze kasowanie jest wyłączone.')}
 function render(){try{document.getElementById('app').innerHTML=header()+(view==='home'?home():view==='write'?write():view==='history'?history():view==='detail'?detail():view==='analysis'?analysis():more());boxNav();}catch(e){showDiagnostic(e.message)}}
-render();
+document.getElementById('app').innerHTML='<section class="card"><h1>Otwieranie pamiętnika…</h1><p>Sprawdzam historię wpisów.</p></section>';
+initializeDiary();
 
 </script></body></html>
